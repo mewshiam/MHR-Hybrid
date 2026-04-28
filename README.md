@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-MasterHttpRelayVPN-blue?logo=github)](https://github.com/denuitt1/mhr-cfw)
 
-**This project is an edit of [masterking32/MasterHttpRelayVPN](https://github.com/masterking32/MasterHttpRelayVPN)**
+**This project is an edit of [MasterHttpRelayVPN](https://github.com/masterking32/MasterHttpRelayVPN)**
 
 ## Disclaimer
 
