@@ -16,6 +16,8 @@ import ssl
 import time
 
 from core.backend_router import BackendRouter, RequestMetadata
+from core.backend_adapters import AppsScriptAdapter, WorkerAdapter, RelayAttempt, should_fallback
+from core.relay_contract import RelayRequest
 from core.domain_fronter import DomainFronter
 
 log = logging.getLogger("Proxy")
@@ -109,6 +111,8 @@ class ProxyServer:
         self.fronter = DomainFronter(config)
         self.router = BackendRouter(config)
         self._backend_errors = {"worker": 0, "apps_script": 0}
+        self.apps_adapter = AppsScriptAdapter(self.fronter)
+        self.worker_adapter = WorkerAdapter(self.fronter)
         self.mitm = None
         self._cache = ResponseCache(max_mb=50)
 
@@ -665,6 +669,36 @@ class ProxyServer:
             apps_mode_available=bool(getattr(self.fronter, "_script_ids", [])),
         )
 
+
+    async def _relay_with_backend_chain(self, preferred: str, method: str, url: str, headers: dict, body: bytes) -> bytes:
+        request = RelayRequest.from_inputs(method, url, headers, body)
+        chain = [preferred, "apps_script" if preferred == "worker" else "worker"]
+        attempts: list[RelayAttempt] = []
+        max_apps_payload = int(getattr(self.router, "worker_payload_limit", 2 * 1024 * 1024))
+
+        if len(body) > max_apps_payload and preferred == "apps_script":
+            chain = ["worker", "apps_script"]
+
+        for idx, backend in enumerate(chain):
+            try:
+                adapter = self.worker_adapter if backend == "worker" else self.apps_adapter
+                out = await adapter.send(request)
+                reason = should_fallback(response=out)
+                attempts.append(RelayAttempt(backend=backend, reason=reason or "ok"))
+                if reason and idx == 0:
+                    continue
+                log.info("Relay attempts: %s", [(a.backend, a.reason) for a in attempts])
+                return self.fronter._contract_to_http_bytes(out)
+            except Exception as exc:
+                reason = should_fallback(exc=exc) or "error"
+                attempts.append(RelayAttempt(backend=backend, reason=reason))
+                if idx == 0:
+                    continue
+                break
+
+        log.info("Relay attempts: %s", [(a.backend, a.reason) for a in attempts])
+        return b"HTTP/1.1 502 Bad Gateway\r\n\r\nRelay chain failed\r\n"
+
     # ── Plain HTTP forwarding ─────────────────────────────────────
 
     async def _do_http(self, header_block: bytes, reader, writer):
@@ -716,15 +750,12 @@ class ProxyServer:
 
         if response is None:
             try:
-                response = await self.fronter.route_http_request(
-                    backend=selected,
+                response = await self._relay_with_backend_chain(
+                    preferred=selected,
                     method=method,
                     url=url,
                     headers=headers,
                     body=body,
-                    header_block=header_block,
-                    relay_cb=self._relay_smart,
-                    tunnel_cb=self._tunnel_http,
                 )
             except Exception:
                 self._backend_errors[selected] = self._backend_errors.get(selected, 0) + 1
