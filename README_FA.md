@@ -1,9 +1,18 @@
+# MHR-Hybrid - راهنمای راه‌اندازی
 # آموزش راه‌اندازی پروژه (Cloudflare Worker + Google Apps Script)
 | [English](README.md) | [Persian](README_FA.md) |
 | :---: | :---: |
 
 Persian translation was provided by [pingplas_channel](https://t.me/pingplas_channel)
 
+
+---
+
+## یادداشت مهاجرت برند
+
+- نام‌های `mhr-cfw`، `MasterHttpRelayVPN` و `DomainFront Tunnel` به **MHR-Hybrid** تغییر کرده‌اند.
+- این تغییر فقط برندینگ است؛ قرارداد پروتکل، فیلدهای payload و روند راه‌اندازی بدون تغییر باقی مانده‌اند.
+- کلیدهای `config.json` و modeها مثل قبل کار می‌کنند.
 
 ---
 

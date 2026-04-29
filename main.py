@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DomainFront Tunnel — Bypass DPI censorship via Domain Fronting.
+MHR-Hybrid — Bypass DPI censorship via Domain Fronting.
 
 Run a local HTTP proxy that tunnels all traffic through a CDN using
 domain fronting: the TLS SNI shows an allowed domain while the encrypted
@@ -32,8 +32,8 @@ def setup_logging(level_name: str):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="domainfront-tunnel",
-        description="Local HTTP proxy that tunnels traffic through domain fronting.",
+        prog="mhr-hybrid",
+        description="MHR-Hybrid local HTTP proxy that tunnels traffic through domain fronting.",
     )
     parser.add_argument(
         "-c", "--config",
@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument(
         "-v", "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=f"MHR-Hybrid v{__version__}",
     )
     parser.add_argument(
         "--install-cert",
@@ -149,7 +149,7 @@ def main():
     log = logging.getLogger("Main")
 
     mode = config.get("mode", "domain_fronting")
-    log.info("DomainFront Tunnel starting (mode: %s)", mode)
+    log.info("MHR-Hybrid starting (mode: %s)", mode)
 
     if mode == "custom_domain":
         log.info("Custom domain    : %s", config["custom_domain"])

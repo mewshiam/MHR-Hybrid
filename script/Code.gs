@@ -128,9 +128,9 @@ function _buildWorkerPayload(req) {
 
 function doGet(e) {
   return HtmlService.createHtmlOutput(
-    "<!DOCTYPE html><html><head><title>My App</title></head>" +
+    "<!DOCTYPE html><html><head><title>MHR-Hybrid Relay</title></head>" +
       '<body style="font-family:sans-serif;max-width:600px;margin:40px auto">' +
-      "<h1>Relay Active</h1><p>Cloudflare Worker routing enabled.</p>" +
+      "<h1>MHR-Hybrid Relay Active</h1><p>MHR-Hybrid Cloudflare Worker routing is enabled.</p>" +
       "</body></html>"
   );
 }

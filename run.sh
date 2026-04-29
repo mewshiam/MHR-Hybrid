@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MasterHttpRelayVPN one-click launcher (Linux / macOS)
+# MHR-Hybrid one-click launcher (Linux / macOS)
 # Creates a local virtualenv, installs deps, runs the setup wizard
 # if needed, then starts the proxy.
 
@@ -42,6 +42,6 @@ if ! "$VPY" -m pip install --disable-pip-version-check -q -r requirements.txt; t
 fi
 
 echo
-echo "[*] Starting mhr-cfw ..."
+echo "[*] Starting MHR-Hybrid ..."
 echo
 exec "$VPY" main.py "$@"

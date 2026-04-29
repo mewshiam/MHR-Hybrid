@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-REM -------- MasterHttpRelayVPN one-click launcher (Windows) --------
+REM -------- MHR-Hybrid one-click launcher (Windows) --------
 REM Creates a local virtualenv, installs deps, runs the setup wizard
 REM if needed, then starts the proxy.
 
@@ -52,7 +52,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [*] Starting mhr-cfw ...
+echo [*] Starting MHR-Hybrid ...
 echo.
 "%VPY%" main.py %*
 set "RC=%errorlevel%"
