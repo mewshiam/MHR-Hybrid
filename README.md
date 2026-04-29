@@ -1,226 +1,425 @@
-# MHR-Hybrid - MasterHttpRelay + Cloudflare Worker
+# MHR-Hybrid
 
 [![GitHub](https://img.shields.io/badge/GitHub-MHR--Hybrid-blue?logo=github)](https://github.com/mewshiam/MHR-Hybrid)
-
 
 | [English](README.md) | [Persian](README_FA.md) |
 | :---: | :---: |
 
-## Disclaimer
+## 1) Overview
 
-`MHR-Hybrid` is provided for educational, testing, and research purposes only.
+MHR-Hybrid runs a **local proxy backend** and can optionally expose a local web dashboard endpoint plus a separate **PyQt desktop dashboard**.
 
-- **Provided without warranty:** This software is provided "AS IS", without express or implied warranty, including merchantability, fitness for a particular purpose, and non-infringement.
-- **Limitation of liability:** The developers and contributors are not responsible for any direct, indirect, incidental, consequential, or other damages resulting from the use of this project or the inability to use it.
-- **User responsibility:** Running this project outside controlled test environments may affect networks, accounts, proxies, certificates, or connected systems. You are solely responsible for installation, configuration, and use.
-- **Legal compliance:** You are responsible for complying with all local, national, and international laws and regulations before using this software.
-- **Google services compliance:** If you use Google Apps Script or other Google services with this project, you are responsible for complying with Google's Terms of Service, acceptable use rules, quotas, and platform policies. Misuse may lead to suspension or termination of your Google account or deployments.
-- **License terms:** Use, copying, distribution, and modification of this software are governed by the repository license. Any use outside those terms is prohibited.
+### Architecture flow
+
+```text
+Browser / App Client
+        |
+        v
+Local MHR-Hybrid Proxy Backend (main.py)
+        |
+        +--> Relay backend(s):
+              - Google Apps Script relay (`mode: apps_script`)
+              - Google fronting relay (`mode: google_fronting`)
+              - Domain-fronted worker relay (`mode: domain_fronting`)
+              - Direct custom-domain worker relay (`mode: custom_domain`)
+
+Separate process:
+PyQt Desktop Dashboard (desktop_ui/main.py)
+   -> reads backend API: GET http://<host>:<port>/__mhr/api/dashboard
+```
+
+### What changed vs the old web UI
+
+- The legacy `ui/` web dashboard is now **optional/deprecated** for day-to-day use.
+- The recommended local operator interface is the **PyQt desktop dashboard** (`python -m desktop_ui.main`).
+- The embedded web route (`/__mhr/ui/`) remains available for compatibility, but it is no longer the primary UX.
 
 ---
 
+## 2) Prerequisites
 
-## Branding migration notes
-
-- `mhr-cfw`, `MasterHttpRelayVPN`, and `DomainFront Tunnel` labels have been renamed to **MHR-Hybrid**.
-- This is a branding-only migration: deployment flow, relay payload fields, and protocol behavior are unchanged.
-- Existing `config.json` keys and runtime modes continue to work as before.
+- **Python:** 3.10+ recommended.
+- **OS support (project code paths):**
+  - Windows
+  - Linux (Debian/Ubuntu, RHEL/Fedora/CentOS, Arch family)
+  - macOS
+- **Network requirements:**
+  - Outbound HTTPS access to the relay infrastructure you configure (Google/worker/custom endpoints).
+- **Certificate permissions (important in MITM relay mode):**
+  - `apps_script` mode requires trusting the local generated CA certificate for full HTTPS interception.
+  - Auto-install may require elevated privileges on some systems.
+  - Optional admin/sudo may be needed depending on store and platform.
 
 ---
 
-## How It Works
+## 3) Installation
 
+### 3.1 Clone repository
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/mewshiam/MHR-Hybrid.git
+cd MHR-Hybrid
 ```
-Client -> Local Proxy -> Google/CDN front -> GoogleAppsScript (GAS) Relay -> Cloudflare Worker -> Target website
-             |
-             +-> shows www.google.com to the network DPI filter
-```
-In normal use, the browser sends traffic to the proxy running on your computer.
-The proxy sends that traffic through Google-facing infrastructure so the network only sees an allowed domain such as `www.google.com`.
-Your deployed relay then fetches the real website through cloudflare worker and sends the response back through the same path.
 
-This means the filter sees normal-looking Google traffic, while the actual destination stays hidden inside the relay request.
-
---- 
-
-## How to Use
-
-### 1 - Download project and extract 
-
+**Linux/macOS (bash/zsh):**
 ```bash
 git clone https://github.com/mewshiam/MHR-Hybrid.git
 cd MHR-Hybrid
+```
+
+### 3.2 Create virtual environment
+
+**Windows (PowerShell):**
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+**Linux/macOS (bash/zsh):**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3.3 Install dependencies
+
+**Windows:**
+```powershell
 pip install -r requirements.txt
 ```
-> **Can't reach PyPI directly?** Use this mirror instead:
-> ```bash
-> pip install -r requirements.txt -i https://mirror-pypi.runflare.com/simple/ --trusted-host mirror-pypi.runflare.com
-> ```
 
-
-### 2 - Set Up the Cloudflare Worker (worker.js)
-
-1. Open [Cloudflare Dashboard](https://dash.cloudflare.com/) and sign in with your Cloudflare account.
-2. From the sidebar, navigate to **Compute > Workers & Pages**
-3. Click **Create Application**, Choose **Start with Hello World** and click on **Deploy**
-4. Click on **Edit code** and **Delete** all the default code in the editor.
-5. Open the [`worker.js`](script/worker.js) file from this project (under `script/`), **copy everything**, and paste it into the Apps Script editor.
-6. **Important:** Change the worker on this line to the worker you created:
-   ```javascript
-   const WORKER_URL = "myworker.workers.dev";
-   ```
-7. Click **Deploy**.
-
-### 3 - Set Up the Google Relay (Code.gs)
-
-1. Open [Google Apps Script](https://script.google.com/) and sign in with your Google account.
-2. Click **New project**.
-3. **Delete** all the default code in the editor.
-4. Open the [`Code.gs`](script/Code.gs) file from this project (under `script/`), **copy everything**, and paste it into the Apps Script editor.
-5. **Important:** Change the password on this line to something only you know, also replace the worker url with your cloudflare worker:
-   ```javascript
-   const AUTH_KEY = "your-secret-password-here";
-   const WORKER_URL "https://myworker.workers.dev";
-   ```
-6. Click **Deploy** → **New deployment**.
-7. Choose **Web app** as the type.
-8. Set:
-   - **Execute as:** Me
-   - **Who has access:** Anyone
-9. Click **Deploy**.
-10. **Copy the Deployment ID** (it looks like a long random string). You'll need it in the next step.
-
-> ⚠️ Remember the password you set in step 3. You'll use the same password in the config file below.
-
-### 4 - Configure the config.json file
-
-1. Copy the example config file:
-   ```bash
-   cp config.example.json config.json
-   ```
-   On Windows, you can also just copy & rename the file manually.
-
-2. Open `config.json` in any text editor and fill in your values:
-   ```json
-   {
-     "mode": "apps_script",
-     "google_ip": "216.239.38.120",
-     "front_domain": "www.google.com",
-     "script_id": "PASTE_YOUR_DEPLOYMENT_ID_HERE",
-     "auth_key": "your-secret-password-here",
-     "listen_host": "127.0.0.1",
-     "listen_port": 8085,
-     "socks5_enabled": true,
-     "socks5_port": 1080,
-     "log_level": "INFO",
-     "verify_ssl": true
-   }
-   ```
-   - `script_id` → Paste the Deployment ID from Step 3.
-   - `auth_key` → The **same password** you set in `Code.gs`.
-
-### 4 - Run
-
-Simply click on `start.bat` file (on windows) or `start.sh` (on linux).
-
-or if you want to run it manually:
+**Linux/macOS:**
 ```bash
-python3 main.py
+pip install -r requirements.txt
 ```
 
-You should see a message saying the HTTP proxy is running on `127.0.0.1:8085`
-
-You can use [FoxyProxy](https://getfoxyproxy.org/) [Chrome Extension](https://chromewebstore.google.com/detail/foxyproxy/gcknhkkoolaabfmlnjonogaaifnjlfnp?hl=en) or [Firefox Extension](https://addons.mozilla.org/en-US/firefox/addon/foxyproxy-standard/) to use this proxy in your browser.
-
-### 5 - Test your connection
-
-Open [ipleak.net](https://ipleak.net) in your browser, you should see your ip address set as cloudflare's.
-
-<img width="1454" height="869" alt="image" src="https://github.com/user-attachments/assets/dfd3316d-69b6-4b0e-b564-fdb055dbdafd" />
-
-
-## Local Dashboard UI
-
-A dedicated frontend surface is now available at `http://127.0.0.1:<listen_port>/__mhr/ui/`.
-
-### Run proxy backend
-
-Start the local proxy process first (this is the API provider for the dashboard):
-
+If your network cannot reach PyPI directly:
 ```bash
-python3 main.py --host 127.0.0.1 --port 8085
+pip install -r requirements.txt -i https://mirror-pypi.runflare.com/simple/ --trusted-host mirror-pypi.runflare.com
 ```
 
-Runtime contract:
-- Proxy process exposes dashboard API at `GET http://<host>:<port>/__mhr/api/dashboard`.
-- `<host>` and `<port>` come from `listen_host`/`listen_port` in `config.json` or CLI overrides.
+---
 
-### Run PyQt dashboard
+## 4) Configuration (`config.json`)
 
-You can point the desktop dashboard at the proxy API with either CLI args or a settings file.
+Create your local config file first:
 
-CLI:
-
-```bash
-python3 -m desktop_ui.main --host 127.0.0.1 --port 8085
+**Windows (PowerShell):**
+```powershell
+Copy-Item config.example.json config.json
 ```
 
-Or pass full URL:
-
+**Linux/macOS:**
 ```bash
-python3 -m desktop_ui.main --api-base-url http://127.0.0.1:8085
+cp config.example.json config.json
 ```
 
-Settings file (`desktop_ui_settings.json` by default, override with `--settings`):
+### 4.1 Minimal example
 
 ```json
 {
-  "host": "127.0.0.1",
-  "port": 8085
+  "mode": "apps_script",
+  "google_ip": "216.239.38.120",
+  "front_domain": "www.google.com",
+  "script_id": "YOUR_APPS_SCRIPT_DEPLOYMENT_ID",
+  "auth_key": "CHANGE_ME_TO_A_STRONG_SECRET",
+  "listen_host": "127.0.0.1",
+  "listen_port": 8085,
+  "log_level": "INFO",
+  "verify_ssl": true
 }
 ```
 
-If the proxy API is unavailable, the PyQt dashboard shows an actionable error state with steps to start/check the backend and verify the configured endpoint.
+### 4.2 Key reference (purpose, type/values, default behavior, example)
 
-### Migration note (`ui/` web dashboard)
+#### Core keys
 
-- The legacy `ui/` web dashboard is now optional/deprecated.
-- Recommended local desktop UX is the PyQt dashboard (`python3 -m desktop_ui.main`).
-- The embedded browser UI route (`/__mhr/ui/`) remains available for compatibility.
+- `mode`
+  - Purpose: Select relay strategy.
+  - Type/allowed: string; one of `apps_script`, `google_fronting`, `domain_fronting`, `custom_domain`.
+  - Default behavior: If omitted, runtime treats mode like `domain_fronting`.
+  - Example: `"mode": "apps_script"`
 
-### Modules
-- Backend status / health
-- Routing policy preview
-- Relay diagnostics / log summaries
-- Config validation
+- `auth_key`
+  - Purpose: Shared auth secret for relay contract.
+  - Type/allowed: non-empty string.
+  - Default behavior: required; startup fails if missing.
+  - Example: `"auth_key": "my-strong-secret"`
 
-### UI states
-Each module can render:
-- **Loading** while the API call is in progress.
-- **Empty** with an action hint (for example: generate proxy traffic, then refresh).
-- **Success** with structured telemetry details.
-- **Error** with a clear recovery action (for example: confirm proxy is running and refresh).
+- `listen_host`
+  - Purpose: Bind address for local proxy/API.
+  - Type/allowed: string IP/host.
+  - Default behavior: `127.0.0.1`.
+  - Example: `"listen_host": "127.0.0.1"`
 
-### Compatibility note
-The dashboard reads local proxy API data from `GET /__mhr/api/dashboard` and does **not** modify relay request/response payload fields or protocol behavior.
+- `listen_port`
+  - Purpose: TCP listen port for local proxy/API.
+  - Type/allowed: integer.
+  - Default behavior: backend defaults to `8080` if not set.
+  - Example: `"listen_port": 8085`
 
-### Screenshots
-![Dashboard Overview](docs/screenshots/dashboard-overview.svg)
+- `log_level`
+  - Purpose: Logging verbosity.
+  - Type/allowed: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
+  - Default behavior: `INFO`.
+  - Example: `"log_level": "DEBUG"`
 
+- `verify_ssl`
+  - Purpose: Upstream TLS verification behavior.
+  - Type/allowed: boolean.
+  - Default behavior: `true` if omitted in example flow.
+  - Example: `"verify_ssl": true`
 
-## Creating a GitHub Release (Maintainers)
+#### Mode-specific keys
 
-Use the built-in **Release** workflow to create a versioned tag and GitHub Release with attached artifacts.
+- `apps_script` mode keys
+  - `script_id` (string) or `script_ids` (array of strings)
+    - Purpose: Apps Script deployment ID(s), optional round-robin when list provided.
+    - Default behavior: required in this mode; startup fails without valid value.
+    - Example: `"script_id": "AKfycbx..."`
 
-1. Open the repository on GitHub.
-2. Go to **Actions** → **Release**.
-3. Click **Run workflow**.
-4. Enter only the `version` input in tag format (example: `v1.0.0`).
-5. Click **Run workflow** to start.
+- `google_fronting` mode keys
+  - `worker_host` (string)
+    - Purpose: Upstream worker/Cloud Run host used behind Google front.
+    - Default behavior: required in this mode.
+    - Example: `"worker_host": "my-service.a.run.app"`
+  - `google_ip` / `front_domain`
+    - Purpose: Google-facing front target details.
+    - Default behavior: if omitted, runtime logs default front domain as `www.google.com` and common Google IP usage.
+    - Example: `"front_domain": "www.google.com"`
 
-The workflow will:
-- validate the version format,
-- build release deliverables,
-- create/push the git tag,
-- create a GitHub Release named with the same version,
-- upload generated artifacts as release assets.
+- `domain_fronting` mode keys
+  - `front_domain` (string), `worker_host` (string)
+    - Purpose: SNI/front host and effective upstream host.
+    - Default behavior: both required in this mode.
+    - Example:
+      ```json
+      { "front_domain": "www.google.com", "worker_host": "myworker.workers.dev" }
+      ```
+
+- `custom_domain` mode key
+  - `custom_domain` (string)
+    - Purpose: Use your own domain endpoint routing.
+    - Default behavior: required in this mode.
+    - Example: `"custom_domain": "relay.example.com"`
+
+#### Frequently used optional keys
+
+- `socks5_enabled` (bool, default `true`), `socks5_host` (string), `socks5_port` (int, default `1080`)
+- `hosts` (object map of host/suffix overrides to IPs)
+- `router` (object)
+  - `enabled` (bool, default `true`)
+  - `prefer_worker_first` (bool, default `true`)
+  - `worker_payload_limit` (int bytes, default `2097152`)
+  - `worker_retry_threshold` (int, default `2`)
+  - `worker_error_threshold` (int, default `3`)
+  - `worker_timeout_floor_ms` (int, default `1200`)
+
+---
+
+## 5) Certificate setup
+
+> Certificate trust is most relevant when using interception flows (notably `apps_script`).
+
+### 5.1 Automatic installation
+
+Run installer mode:
+
+```bash
+python main.py --install-cert
+```
+
+This installs the generated CA certificate into supported trust stores, then exits.
+
+### 5.2 Manual installation
+
+Certificate file path used by the project:
+
+```text
+ca/ca.crt
+```
+
+Manual install targets:
+- Windows: Trusted Root Certification Authorities (Current User or Local Machine)
+- macOS: login keychain or system keychain
+- Linux: distro trust store (`update-ca-certificates`, `update-ca-trust`, or `trust extract-compat`)
+- Firefox/NSS stores when present
+
+### 5.3 Verify certificate trust
+
+Start backend without skipping checks:
+
+```bash
+python main.py --config config.json
+```
+
+Expected success signal in logs:
+- `MITM CA is already trusted.`
+
+### 5.4 Rollback (remove trust)
+
+Remove the installed `MHR-Hybrid` root CA from your OS/browser trust store using platform certificate manager tools.
+
+After rollback, restart the browser and backend; HTTPS interception paths should no longer be trusted.
+
+---
+
+## 6) Run backend service
+
+### 6.1 CLI usage
+
+```bash
+python main.py [--config PATH] [--host HOST] [--port PORT] [--log-level LEVEL] [--install-cert] [--no-cert-check]
+```
+
+### 6.2 Common examples
+
+- Use explicit config file:
+  ```bash
+  python main.py --config config.json
+  ```
+- Bind custom interface/port:
+  ```bash
+  python main.py --host 127.0.0.1 --port 8085
+  ```
+- Verbose debug logs:
+  ```bash
+  python main.py --log-level DEBUG
+  ```
+- Certificate bootstrap only:
+  ```bash
+  python main.py --install-cert
+  ```
+- Skip startup trust verification (advanced/debug only):
+  ```bash
+  python main.py --no-cert-check
+  ```
+
+### 6.3 Expected startup logs and success criteria
+
+Successful startup usually includes:
+- Mode banner (for example `MHR-Hybrid starting (mode: apps_script)`).
+- Mode-specific routing info (script IDs or host mappings).
+- Proxy bind line (`Proxy address      : <host>:<port>`).
+
+Success criteria:
+- Process remains running.
+- Config validation passes (no missing mode-required keys).
+- Local endpoint is reachable at configured host/port.
+
+---
+
+## 7) Run PyQt desktop UI
+
+### 7.1 Launch commands
+
+- Target host/port:
+  ```bash
+  python -m desktop_ui.main --host 127.0.0.1 --port 8085
+  ```
+- Or pass full API base URL:
+  ```bash
+  python -m desktop_ui.main --api-base-url http://127.0.0.1:8085
+  ```
+- Optional periodic refresh:
+  ```bash
+  python -m desktop_ui.main --host 127.0.0.1 --port 8085 --poll-seconds 5
+  ```
+
+### 7.2 Refresh behavior
+
+- Manual refresh: **Refresh** button.
+- Automatic refresh: enabled only if `--poll-seconds > 0`.
+
+### 7.3 Backend unreachable error states
+
+If backend API is unreachable, dashboard modules move into error state and show actionable guidance (start/check backend, verify host/port/API URL).
+
+---
+
+## 8) Daily usage guides
+
+### 8.1 Configure browser proxy
+
+Manual browser proxy values:
+- HTTP proxy host: `127.0.0.1`
+- HTTP proxy port: your `listen_port` (for example `8085`)
+
+Optional extension workflow:
+- Install FoxyProxy (Chrome or Firefox).
+- Add a profile pointing to `127.0.0.1:<listen_port>`.
+- Enable profile before browsing test targets.
+
+### 8.2 Traffic validation procedure
+
+1. Start backend and ensure no startup config/cert errors.
+2. Enable browser proxy profile.
+3. Open a validation site (for example `https://ipleak.net`).
+4. Confirm traffic egress matches expected relay/provider behavior.
+5. Check backend logs for relay activity and status summaries.
+
+### 8.3 Interpreting dashboard modules
+
+- **Backend status / health**: confirms API connectivity/runtime health.
+- **Routing policy preview**: shows worker/apps-script routing decisions.
+- **Relay diagnostics / log summaries**: surfaces upstream response patterns.
+- **Config validation**: highlights missing or invalid settings.
+
+---
+
+## 9) Troubleshooting matrix
+
+| Symptom | Probable cause | Fix |
+|---|---|---|
+| Browser cert warning / HTTPS fails | Local MITM CA not trusted | Run `python main.py --install-cert`, restart browser, verify trust logs. |
+| `Address already in use` | Port conflict on `listen_port` or `socks5_port` | Change port(s) in `config.json` or CLI `--port`; ensure socks and proxy ports differ on same host. |
+| Startup says missing config key | Invalid/incomplete `config.json` for chosen mode | Recheck required keys (`auth_key`, plus mode-specific fields). |
+| Relay returns auth or quota-like errors | `auth_key` mismatch or relay-side throttling | Sync secret on both ends; rotate key; inspect relay logs/status. |
+| Desktop UI shows API error state | Backend not running or wrong host/port | Start backend first; verify `--host/--port` or `--api-base-url` in desktop launch command. |
+
+---
+
+## 10) Security and safety
+
+- This project is for **educational/testing/research** use.
+- Running local MITM interception changes TLS trust on your system.
+- Misconfiguration can expose sensitive traffic or break normal browsing.
+- You are responsible for legal/policy compliance in your jurisdiction and service-provider terms.
+- Use isolated test environments (VM, non-primary browser profile, dedicated accounts) before production-like usage.
+
+---
+
+## 11) Developer notes
+
+### 11.1 File layout (backend/UI)
+
+- `main.py` → CLI entrypoint.
+- `src/app.py` → argument parsing, config validation, startup orchestration.
+- `src/proxy/server.py` → local proxy runtime.
+- `src/domain_fronter.py` / `src/backend_adapters.py` / `src/backend_router.py` → relay transport, adapters, and backend selection policy.
+- `src/cert_installer.py` → cross-platform trust install/check.
+- `desktop_ui/main.py` + `desktop_ui/*` → PyQt dashboard app.
+- `ui/*` → legacy web UI assets (compatibility path).
+- `config.example.json` → baseline config template.
+
+### 11.2 Add a new backend mode
+
+1. Define config contract and validation in `src/app.py`.
+2. Add relay transport/adapter behavior (`src/backend_adapters.py` and/or `src/domain_fronter.py`).
+3. Update backend selection policy if needed (`src/backend_router.py`).
+4. Expose telemetry fields expected by dashboard API.
+5. Document new mode keys in this README and `config.example.json`.
+
+### 11.3 Add a new dashboard panel
+
+1. Add module definition in `desktop_ui/view_model.py`.
+2. Map new API payload segment to panel state.
+3. Ensure backend endpoint (`/__mhr/api/dashboard`) includes required fields.
+4. Add rendering details in PyQt view if custom display logic is needed.
+
+---
+
+## Disclaimer
+
+`MHR-Hybrid` is provided without warranty for educational, testing, and research purposes. You are solely responsible for deployment, configuration, legal compliance, and operational safety.
