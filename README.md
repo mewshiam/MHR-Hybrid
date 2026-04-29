@@ -36,61 +36,48 @@ PyQt Desktop Dashboard (desktop_ui/main.py)
 
 ---
 
-## 2) Prerequisites
+## 2) Quickstart (no virtualenv required)
 
-- **Python:** 3.10+ recommended.
-- **OS support (project code paths):**
-  - Windows
-  - Linux (Debian/Ubuntu, RHEL/Fedora/CentOS, Arch family)
-  - macOS
-- **Network requirements:**
-  - Outbound HTTPS access to the relay infrastructure you configure (Google/worker/custom endpoints).
-- **Certificate permissions (important in MITM relay mode):**
-  - `apps_script` mode requires trusting the local generated CA certificate for full HTTPS interception.
-  - Auto-install may require elevated privileges on some systems.
-  - Optional admin/sudo may be needed depending on store and platform.
+1. Install **Python 3.10+** and ensure it is available on your PATH as `python` (Windows) or `python3` (Linux/macOS).
+2. Install dependencies:
+   - Windows:
+   ```powershell
+   pip install -r requirements.txt
+   ```
+   - Linux/macOS:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Create config:
+   - Windows:
+   ```powershell
+   Copy-Item config.example.json config.json
+   ```
+   - Linux/macOS:
+   ```bash
+   cp config.example.json config.json
+   ```
+4. Run launcher:
+   - Windows: `run.bat`
+   - Linux/macOS: `./run.sh`
 
----
+The launchers also try to auto-install missing dependencies on first run.
 
-## 3) Installation
+## 3) Optional: recommended isolation with virtualenv
 
-### 3.1 Clone repository
-
-**Windows (PowerShell):**
-```powershell
-git clone https://github.com/mewshiam/MHR-Hybrid.git
-cd MHR-Hybrid
-```
-
-**Linux/macOS (bash/zsh):**
-```bash
-git clone https://github.com/mewshiam/MHR-Hybrid.git
-cd MHR-Hybrid
-```
-
-### 3.2 Create virtual environment
+If you prefer isolated Python packages, use a virtual environment:
 
 **Windows (PowerShell):**
 ```powershell
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
 **Linux/macOS (bash/zsh):**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-### 3.3 Install dependencies
-
-**Windows:**
-```powershell
-pip install -r requirements.txt
-```
-
-**Linux/macOS:**
-```bash
 pip install -r requirements.txt
 ```
 
