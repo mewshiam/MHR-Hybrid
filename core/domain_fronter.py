@@ -706,6 +706,16 @@ class DomainFronter:
         filtered.append(f"Content-Length: {len(body)}")
         return ("\r\n".join(filtered) + "\r\n\r\n").encode() + body
 
+    async def route_http_request(self, *, backend: str, method: str, url: str,
+                                 headers: dict, body: bytes,
+                                 header_block: bytes,
+                                 relay_cb,
+                                 tunnel_cb):
+        """Route plain HTTP request to selected backend implementation."""
+        if backend == "apps_script":
+            return await relay_cb(method, url, headers, body)
+        return await tunnel_cb(header_block, body)
+
     def _build_payload(self, method, url, headers, body):
         """Build the JSON relay payload dict."""
         payload = {

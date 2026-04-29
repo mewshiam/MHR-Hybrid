@@ -15,6 +15,7 @@ import re
 import ssl
 import time
 
+from core.backend_router import BackendRouter, RequestMetadata
 from core.domain_fronter import DomainFronter
 
 log = logging.getLogger("Proxy")
@@ -106,6 +107,8 @@ class ProxyServer:
         self.port = config.get("listen_port", 8080)
         self.mode = config.get("mode", "domain_fronting")
         self.fronter = DomainFronter(config)
+        self.router = BackendRouter(config)
+        self._backend_errors = {"worker": 0, "apps_script": 0}
         self.mitm = None
         self._cache = ResponseCache(max_mb=50)
 
@@ -647,6 +650,21 @@ class ProxyServer:
                 return True
         return False
 
+    def _choose_http_backend(self, method: str, url: str, headers: dict, body: bytes) -> str:
+        meta = RequestMetadata(
+            method=method.upper(),
+            url=url,
+            payload_size=len(body),
+            retry_count=0,
+            prior_backend_errors=self._backend_errors,
+            timeout_budget_ms=None,
+        )
+        return self.router.choose(
+            meta,
+            worker_mode_available=True,
+            apps_mode_available=bool(getattr(self.fronter, "_script_ids", [])),
+        )
+
     # ── Plain HTTP forwarding ─────────────────────────────────────
 
     async def _do_http(self, header_block: bytes, reader, writer):
@@ -660,59 +678,65 @@ class ProxyServer:
         first_line = header_block.split(b"\r\n")[0].decode(errors="replace")
         log.info("HTTP → %s", first_line)
 
-        if self.mode == "apps_script":
-            # Parse request and relay through Apps Script
-            parts = first_line.strip().split(" ", 2)
-            method = parts[0] if parts else "GET"
-            url = parts[1] if len(parts) > 1 else "/"
+        # Parse request once; backend is selected per request by router.
+        parts = first_line.strip().split(" ", 2)
+        method = parts[0] if parts else "GET"
+        url = parts[1] if len(parts) > 1 else "/"
 
-            headers = {}
-            for raw_line in header_block.split(b"\r\n")[1:]:
-                if b":" in raw_line:
-                    k, v = raw_line.decode(errors="replace").split(":", 1)
-                    headers[k.strip()] = v.strip()
+        headers = {}
+        for raw_line in header_block.split(b"\r\n")[1:]:
+            if b":" in raw_line:
+                k, v = raw_line.decode(errors="replace").split(":", 1)
+                headers[k.strip()] = v.strip()
 
-            # ── CORS preflight over plain HTTP ────────────────────────────
-            origin = next(
-                (v for k, v in headers.items() if k.lower() == "origin"), ""
-            )
-            acr_method = next(
-                (v for k, v in headers.items()
-                 if k.lower() == "access-control-request-method"), ""
-            )
-            acr_headers_val = next(
-                (v for k, v in headers.items()
-                 if k.lower() == "access-control-request-headers"), ""
-            )
-            if method.upper() == "OPTIONS" and acr_method:
-                log.debug("CORS preflight (HTTP) → %s (responding locally)", url[:60])
-                writer.write(self._cors_preflight_response(origin, acr_method, acr_headers_val))
-                await writer.drain()
-                return
+        # ── CORS preflight over plain HTTP ────────────────────────────
+        origin = next(
+            (v for k, v in headers.items() if k.lower() == "origin"), ""
+        )
+        acr_method = next(
+            (v for k, v in headers.items()
+             if k.lower() == "access-control-request-method"), ""
+        )
+        acr_headers_val = next(
+            (v for k, v in headers.items()
+             if k.lower() == "access-control-request-headers"), ""
+        )
+        if method.upper() == "OPTIONS" and acr_method:
+            log.debug("CORS preflight (HTTP) → %s (responding locally)", url[:60])
+            writer.write(self._cors_preflight_response(origin, acr_method, acr_headers_val))
+            await writer.drain()
+            return
 
-            # Cache check for GET
-            response = None
-            if method == "GET" and not body:
-                response = self._cache.get(url)
-                if response:
-                    log.debug("Cache HIT (HTTP): %s", url[:60])
+        selected = self._choose_http_backend(method, url, headers, body)
+        response = None
+        if selected == "apps_script" and method == "GET" and not body:
+            response = self._cache.get(url)
+            if response:
+                log.debug("Cache HIT (HTTP): %s", url[:60])
 
-            if response is None:
-                response = await self._relay_smart(method, url, headers, body)
-                # Cache successful GET
-                if method == "GET" and not body and response:
-                    ttl = ResponseCache.parse_ttl(response, url)
-                    if ttl > 0:
-                        self._cache.put(url, response, ttl)
+        if response is None:
+            try:
+                response = await self.fronter.route_http_request(
+                    backend=selected,
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    body=body,
+                    header_block=header_block,
+                    relay_cb=self._relay_smart,
+                    tunnel_cb=self._tunnel_http,
+                )
+            except Exception:
+                self._backend_errors[selected] = self._backend_errors.get(selected, 0) + 1
+                raise
 
-            # Inject CORS headers for cross-origin requests
-            if origin and response:
-                response = self._inject_cors_headers(response, origin)
-        elif self.mode in ("google_fronting", "custom_domain", "domain_fronting"):
-            # Use WebSocket tunnel for ALL traffic (much faster than forward())
-            response = await self._tunnel_http(header_block, body)
-        else:
-            response = await self.fronter.forward(header_block + body)
+            if selected == "apps_script" and method == "GET" and not body and response:
+                ttl = ResponseCache.parse_ttl(response, url)
+                if ttl > 0:
+                    self._cache.put(url, response, ttl)
+
+        if origin and response:
+            response = self._inject_cors_headers(response, origin)
 
         writer.write(response)
         await writer.drain()
