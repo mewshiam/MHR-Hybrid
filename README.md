@@ -368,7 +368,167 @@ Optional extension workflow:
 
 ---
 
-## 9) Troubleshooting matrix
+
+## 9) Operational runbook
+
+### 9.1 First-time setup checklist
+
+Use this checklist for a clean initial deployment:
+
+1. **Install dependencies**
+   - Create and activate `.venv`.
+   - Install packages with `pip install -r requirements.txt`.
+2. **Configure runtime**
+   - Copy `config.example.json` to `config.json`.
+   - Set required keys for your selected mode (`mode`, `auth_key`, plus mode-specific fields).
+3. **Install/trust certificate** (when interception mode is used)
+   - Run `python main.py --install-cert`.
+   - Confirm `ca/ca.crt` is trusted in your OS/browser trust store.
+4. **First backend run**
+   - Start backend with `python main.py --config config.json`.
+   - Verify startup logs show bind address and no config/certificate errors.
+5. **UI verification**
+   - Launch desktop UI: `python -m desktop_ui.main --host 127.0.0.1 --port <listen_port>`.
+   - Confirm dashboard modules load without backend/API error states.
+
+### 9.2 Normal operation
+
+#### Start/stop backend safely
+
+- **Start**
+  ```bash
+  python main.py --config config.json
+  ```
+- **Stop**
+  - Use `Ctrl+C` in the terminal running backend.
+  - Wait for process exit before restarting on the same port.
+- **Safe restart sequence**
+  1. Stop backend cleanly (`Ctrl+C`).
+  2. Confirm port is free (for example with `ss -ltnp` on Linux/macOS or `netstat -ano` on Windows).
+  3. Start backend again with explicit config.
+
+#### Start/stop desktop UI
+
+- **Start**
+  ```bash
+  python -m desktop_ui.main --host 127.0.0.1 --port <listen_port>
+  ```
+- **Stop**
+  - Close the desktop window, or terminate process from terminal (`Ctrl+C` if launched interactively).
+
+#### Verify proxy behavior and dashboard health
+
+1. Enable browser proxy to `127.0.0.1:<listen_port>`.
+2. Open a test endpoint such as `https://ipleak.net`.
+3. Confirm expected egress behavior.
+4. In dashboard, verify backend health is green/reachable and no API error banners appear.
+
+### 9.3 Maintenance
+
+#### Updating repo and dependencies
+
+1. Pull latest changes:
+   ```bash
+   git pull --rebase
+   ```
+2. Reactivate `.venv` and update dependencies:
+   ```bash
+   pip install -r requirements.txt --upgrade
+   ```
+3. Compare `config.example.json` to your `config.json` and merge any new required keys.
+4. Restart backend and desktop UI after updates.
+
+#### Rotating auth key and updating config
+
+1. Generate a new strong random secret.
+2. Update `auth_key` in `config.json`.
+3. Update the corresponding secret in your relay backend(s).
+4. Restart backend and validate requests succeed (no auth mismatch errors).
+
+#### Renewing/reinstalling certificates
+
+- Re-run installer workflow:
+  ```bash
+  python main.py --install-cert
+  ```
+- Restart browser and backend.
+- Re-verify trust via startup logs (`MITM CA is already trusted.`).
+
+### 9.4 Observability
+
+#### Where logs appear
+
+- Backend logs print to the terminal/session where `python main.py ...` is running.
+- Desktop UI diagnostics appear in the terminal/session used to start `python -m desktop_ui.main ...`.
+
+#### Recommended log levels
+
+- **Normal operation:** `INFO`
+- **Investigation/debug sessions:** `DEBUG`
+- You can set level via `config.json` (`log_level`) or CLI `--log-level`.
+
+#### Capture diagnostics for bug reports
+
+1. Start backend with debug logging:
+   ```bash
+   python main.py --config config.json --log-level DEBUG
+   ```
+2. Reproduce issue with timestamps noted.
+3. Capture:
+   - Backend terminal logs.
+   - Desktop UI terminal logs (if UI-related).
+   - Sanitized `config.json` (redact `auth_key` and sensitive hosts if needed).
+4. Include OS, Python version, selected `mode`, and exact command lines used.
+
+### 9.5 Recovery procedures
+
+#### Reset to known-good config
+
+1. Stop backend/UI.
+2. Backup current config:
+   ```bash
+   cp config.json config.json.bak
+   ```
+3. Restore baseline:
+   ```bash
+   cp config.example.json config.json
+   ```
+4. Re-apply required environment-specific values (`auth_key`, relay identifiers/domains, ports).
+5. Start backend and validate health from dashboard/API.
+
+#### Port collision recovery
+
+1. Identify conflicting process on target port (`listen_port` / `socks5_port`).
+2. Stop conflicting process or change MHR-Hybrid ports in `config.json`.
+3. Restart backend and confirm bind succeeds.
+
+#### Certificate uninstall/reinstall flow
+
+1. Remove `MHR-Hybrid` CA from OS/browser trust store.
+2. Restart browser to clear trust cache.
+3. Reinstall certificate:
+   ```bash
+   python main.py --install-cert
+   ```
+4. Restart backend and verify trust success log.
+
+### 9.6 Uninstall/cleanup
+
+#### Remove venv/dependencies
+
+- From repository root, delete virtual environment folder:
+  - Linux/macOS: `rm -rf .venv`
+  - Windows (PowerShell): `Remove-Item -Recurse -Force .venv`
+
+#### Remove generated cert artifacts and temporary files
+
+- Remove project-generated certificate artifacts (if present), such as files under `ca/` created by local setup.
+- Remove temporary local logs/artifacts you created during debugging.
+- Optionally remove cloned repository directory once no longer needed.
+
+---
+
+## 10) Troubleshooting matrix
 
 | Symptom | Probable cause | Fix |
 |---|---|---|
@@ -380,7 +540,7 @@ Optional extension workflow:
 
 ---
 
-## 10) Security and safety
+## 11) Security and safety
 
 - This project is for **educational/testing/research** use.
 - Running local MITM interception changes TLS trust on your system.
@@ -390,9 +550,9 @@ Optional extension workflow:
 
 ---
 
-## 11) Developer notes
+## 12) Developer notes
 
-### 11.1 File layout (backend/UI)
+### 12.1 File layout (backend/UI)
 
 - `main.py` → CLI entrypoint.
 - `src/app.py` → argument parsing, config validation, startup orchestration.
@@ -403,7 +563,7 @@ Optional extension workflow:
 - `ui/*` → legacy web UI assets (compatibility path).
 - `config.example.json` → baseline config template.
 
-### 11.2 Add a new backend mode
+### 12.2 Add a new backend mode
 
 1. Define config contract and validation in `src/app.py`.
 2. Add relay transport/adapter behavior (`src/backend_adapters.py` and/or `src/domain_fronter.py`).
@@ -411,7 +571,7 @@ Optional extension workflow:
 4. Expose telemetry fields expected by dashboard API.
 5. Document new mode keys in this README and `config.example.json`.
 
-### 11.3 Add a new dashboard panel
+### 12.3 Add a new dashboard panel
 
 1. Add module definition in `desktop_ui/view_model.py`.
 2. Map new API payload segment to panel state.
