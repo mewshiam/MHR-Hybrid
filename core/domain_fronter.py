@@ -832,14 +832,21 @@ class DomainFronter:
 
     async def _relay_with_retry(self, payload: dict) -> bytes:
         """Single relay with one retry on failure. Uses H2 if available."""
+        cid = payload.get("cid", "-")
         # Try HTTP/2 first — much faster (multiplexed, no pool checkout)
         if self._h2 and self._h2.is_connected:
             for attempt in range(2):
+                t0 = time.perf_counter()
                 try:
-                    return await asyncio.wait_for(
+                    out = await asyncio.wait_for(
                         self._relay_single_h2(payload), timeout=25
                     )
+                    log.info("fronter_relay cid=%s backend=apps_script_h2 latency_ms=%d retry=%d fallback_reason=none",
+                             cid, int((time.perf_counter() - t0) * 1000), attempt)
+                    return out
                 except Exception as e:
+                    log.info("fronter_relay cid=%s backend=apps_script_h2 latency_ms=%d retry=%d fallback_reason=%s",
+                             cid, int((time.perf_counter() - t0) * 1000), attempt, type(e).__name__)
                     if attempt == 0:
                         log.debug("H2 relay failed (%s), reconnecting", e)
                         try:
@@ -853,11 +860,17 @@ class DomainFronter:
         # HTTP/1.1 fallback (pool-based)
         async with self._semaphore:
             for attempt in range(2):
+                t0 = time.perf_counter()
                 try:
-                    return await asyncio.wait_for(
+                    out = await asyncio.wait_for(
                         self._relay_single(payload), timeout=25
                     )
+                    log.info("fronter_relay cid=%s backend=apps_script_h1 latency_ms=%d retry=%d fallback_reason=none",
+                             cid, int((time.perf_counter() - t0) * 1000), attempt)
+                    return out
                 except Exception as e:
+                    log.info("fronter_relay cid=%s backend=apps_script_h1 latency_ms=%d retry=%d fallback_reason=%s",
+                             cid, int((time.perf_counter() - t0) * 1000), attempt, type(e).__name__)
                     if attempt == 0:
                         log.debug("Relay attempt 1 failed (%s: %s), retrying",
                                   type(e).__name__, e)

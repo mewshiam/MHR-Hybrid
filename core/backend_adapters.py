@@ -20,7 +20,7 @@ class RelayAttempt:
 class RelayAdapterBase:
     backend = "unknown"
 
-    async def send(self, request: RelayRequest) -> dict:
+    async def send(self, request: RelayRequest, correlation_id: str = "-") -> dict:
         raise NotImplementedError
 
 
@@ -30,8 +30,10 @@ class AppsScriptAdapter(RelayAdapterBase):
     def __init__(self, fronter):
         self.fronter = fronter
 
-    async def send(self, request: RelayRequest) -> dict:
-        return await self.fronter._relay_apps_script_payload(request.to_payload())
+    async def send(self, request: RelayRequest, correlation_id: str = "-") -> dict:
+        payload = request.to_payload()
+        payload["cid"] = correlation_id
+        return await self.fronter._relay_apps_script_payload(payload)
 
 
 class WorkerAdapter(RelayAdapterBase):
@@ -40,7 +42,7 @@ class WorkerAdapter(RelayAdapterBase):
     def __init__(self, fronter):
         self.fronter = fronter
 
-    async def send(self, request: RelayRequest) -> dict:
+    async def send(self, request: RelayRequest, correlation_id: str = "-") -> dict:
         from urllib.parse import urlparse
         parsed = urlparse(request.u)
         path = parsed.path or "/"
@@ -64,16 +66,20 @@ def should_fallback(exc: Exception | None = None, response: dict | None = None) 
             return "timeout"
         txt = str(exc).lower()
         if "json" in txt or "malformed" in txt or "decode" in txt:
-            return "malformed_json"
-        return "error"
+            return "malformed_response"
+        return "network"
 
     if response is None:
-        return "empty"
+        return "malformed_response"
 
     if response.get("e"):
-        return "backend_error"
+        return "malformed_response"
 
     status = int(response.get("s", 0) or 0)
-    if status == 429 or status >= 500:
-        return f"status_{status}"
+    if status == 429:
+        return "quota"
+    if 400 <= status < 500:
+        return "upstream_4xx"
+    if status >= 500:
+        return "upstream_5xx"
     return None
