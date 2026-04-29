@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (example: v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version format: $VERSION"
+            echo "Expected format: vMAJOR.MINOR.PATCH (example: v1.0.0)"
+            exit 1
+          fi
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Prepare release bundle
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          mkdir -p dist
+          git archive --format=zip --output="dist/MHR-Hybrid-${VERSION}.zip" HEAD
+          git archive --format=tar.gz --output="dist/MHR-Hybrid-${VERSION}.tar.gz" HEAD
+
+          cp config.example.json "dist/config.example-${VERSION}.json"
+          cp run.sh "dist/run-${VERSION}.sh"
+          cp run.bat "dist/run-${VERSION}.bat"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ github.event.inputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-${{ github.event.inputs.version }}
+          path: dist
+
+      - name: Create and push git tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists locally."
+          else
+            git tag "$VERSION" "${GITHUB_SHA}"
+          fi
+
+          if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q "$VERSION"; then
+            echo "Tag $VERSION already exists on origin."
+          else
+            git push origin "$VERSION"
+          fi
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: ${{ github.event.inputs.version }}
+          files: dist/*
+          generate_release_notes: true
