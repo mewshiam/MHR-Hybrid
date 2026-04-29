@@ -20,7 +20,7 @@ import tempfile
 
 log = logging.getLogger("CertInstaller")
 
-CERT_NAME = "mhr-cfw"
+CERT_NAME = "MHR-Hybrid"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
