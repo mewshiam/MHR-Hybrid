@@ -1,0 +1,15 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='700'>
+<rect width='1200' height='700' fill='#0b1220'/>
+<rect x='20' y='20' width='1160' height='60' rx='10' fill='#111b2f' stroke='#22314d'/>
+<text x='40' y='58' fill='#e8edf7' font-size='28' font-family='Arial'>MHR-Hybrid Control Dashboard</text>
+<rect x='20' y='100' width='260' height='580' rx='10' fill='#111b2f' stroke='#22314d'/>
+<text x='40' y='140' fill='#83b4ff' font-size='20' font-family='Arial'>Navigation Modules</text>
+<text x='40' y='180' fill='#e8edf7' font-size='16' font-family='Arial'>• Backend status/health</text>
+<text x='40' y='210' fill='#e8edf7' font-size='16' font-family='Arial'>• Routing policy preview</text>
+<text x='40' y='240' fill='#e8edf7' font-size='16' font-family='Arial'>• Relay diagnostics/logs</text>
+<text x='40' y='270' fill='#e8edf7' font-size='16' font-family='Arial'>• Config validation</text>
+<rect x='300' y='100' width='880' height='130' rx='10' fill='#1f4a2f'/><text x='320' y='145' fill='white' font-size='22' font-family='Arial'>Backend telemetry available</text>
+<rect x='300' y='245' width='880' height='130' rx='10' fill='#1f4a2f'/><text x='320' y='290' fill='white' font-size='22' font-family='Arial'>Routing policy loaded</text>
+<rect x='300' y='390' width='880' height='130' rx='10' fill='#3f3f1f'/><text x='320' y='435' fill='white' font-size='22' font-family='Arial'>No diagnostics yet (actionable empty state)</text>
+<rect x='300' y='535' width='880' height='130' rx='10' fill='#5f2222'/><text x='320' y='580' fill='white' font-size='22' font-family='Arial'>Config validation failed (actionable error)</text>
+</svg>

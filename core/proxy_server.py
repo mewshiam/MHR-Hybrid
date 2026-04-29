@@ -16,6 +16,8 @@ import ssl
 import time
 import json
 import uuid
+from pathlib import Path
+from urllib.parse import urlparse
 
 from core.backend_router import BackendRouter, RequestMetadata
 from core.backend_adapters import AppsScriptAdapter, WorkerAdapter, RelayAttempt, should_fallback
@@ -129,6 +131,8 @@ class ProxyServer:
         # hosts override — DNS fake-map: domain/suffix → IP
         # Checked before any real DNS lookup; supports exact and suffix matching.
         self._hosts: dict[str, str] = config.get("hosts", {})
+        self._ui_root = Path(__file__).resolve().parent.parent / "ui"
+        self._diagnostics: list[str] = []
 
         if self.mode == "apps_script":
             try:
@@ -691,6 +695,66 @@ class ProxyServer:
         self._backend_health[backend] = max(0, self._backend_health.get(backend, 100) - 25)
         if self._backend_health[backend] <= 25:
             self._backend_open_until[backend] = time.time() + 30
+
+    def _diag(self, message: str):
+        self._diagnostics.append(message)
+        if len(self._diagnostics) > 25:
+            self._diagnostics = self._diagnostics[-25:]
+
+    def _validate_config(self) -> dict:
+        required = ["auth_key", "mode"]
+        errors = [f"Missing required key: {k}" for k in required if not self.fronter.config.get(k)]
+        if self.mode == "apps_script" and not (self.fronter.config.get("script_ids") or self.fronter.config.get("script_id")):
+            errors.append("apps_script mode requires script_id or script_ids")
+        return {"valid": len(errors) == 0, "errors": errors}
+
+    def _dashboard_payload(self) -> dict:
+        return {
+            "backends": {
+                name: {
+                    "health": self._backend_health.get(name, 0),
+                    "errors": self._backend_errors.get(name, 0),
+                    "circuit_open_until": self._backend_open_until.get(name, 0),
+                }
+                for name in ["worker", "apps_script"]
+            },
+            "routing_policy": {
+                "mode": self.mode,
+                "router": self.router.__class__.__name__,
+                "worker_payload_limit": getattr(self.router, "worker_payload_limit", None),
+            },
+            "relay_diagnostics": self._diagnostics[-10:],
+            "config_validation": self._validate_config(),
+        }
+
+    def _http_response(self, status: str, body: bytes, content_type: str = "application/json") -> bytes:
+        return (f"HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {len(body)}\r\n\r\n").encode() + body
+
+    def _serve_ui_or_api(self, method: str, url: str) -> bytes | None:
+        parsed = urlparse(url if "://" in url else f"http://local{url}")
+        path = parsed.path or "/"
+        if not path.startswith("/__mhr/"):
+            return None
+
+        if path == "/__mhr/api/dashboard":
+            payload = json.dumps(self._dashboard_payload()).encode()
+            return self._http_response("200 OK", payload)
+
+        if path.startswith("/__mhr/ui"):
+            rel = path[len("/__mhr/ui/"):] if path != "/__mhr/ui" else ""
+            if path in {"/__mhr/ui", "/__mhr/ui/"}:
+                rel = "index.html"
+            target = (self._ui_root / rel).resolve()
+            if not str(target).startswith(str(self._ui_root.resolve())) or not target.exists():
+                return self._http_response("404 Not Found", b"Not Found", "text/plain")
+            ctype = "text/plain"
+            if target.suffix == ".html": ctype = "text/html"
+            elif target.suffix == ".css": ctype = "text/css"
+            elif target.suffix == ".js": ctype = "application/javascript"
+            return self._http_response("200 OK", target.read_bytes(), ctype)
+
+        return self._http_response("404 Not Found", b"Not Found", "text/plain")
+
     async def _relay_with_backend_chain(self, preferred: str, method: str, url: str, headers: dict, body: bytes, correlation_id: str) -> bytes:
         request = RelayRequest.from_inputs(method, url, headers, body)
         chain = [preferred]
@@ -712,6 +776,7 @@ class ProxyServer:
                 attempts.append(RelayAttempt(backend=backend, reason=reason or "ok"))
                 self._record_backend_result(backend, not bool(reason))
                 log.info("relay_result cid=%s backend=%s latency_ms=%s retry=%s fallback_reason=%s", correlation_id, backend, latency_ms, idx, reason or "none")
+                self._diag(f"cid={correlation_id} backend={backend} latency={latency_ms}ms fallback={reason or 'none'}")
                 if reason and idx == 0 and len(chain) > 1:
                     continue
                 log.info("Relay attempts: %s", [(a.backend, a.reason) for a in attempts])
@@ -720,6 +785,7 @@ class ProxyServer:
                 reason = should_fallback(exc=exc) or "network"
                 self._record_backend_result(backend, False)
                 log.info("relay_result cid=%s backend=%s latency_ms=%s retry=%s fallback_reason=%s", correlation_id, backend, int((time.perf_counter()-start)*1000), idx, reason)
+                self._diag(f"cid={correlation_id} backend={backend} error={reason}")
                 attempts.append(RelayAttempt(backend=backend, reason=reason))
                 if idx == 0 and len(chain) > 1:
                     continue
@@ -749,6 +815,12 @@ class ProxyServer:
         parts = first_line.strip().split(" ", 2)
         method = parts[0] if parts else "GET"
         url = parts[1] if len(parts) > 1 else "/"
+
+        local = self._serve_ui_or_api(method, url)
+        if local is not None:
+            writer.write(local)
+            await writer.drain()
+            return
 
         headers = {}
         for raw_line in header_block.split(b"\r\n")[1:]:

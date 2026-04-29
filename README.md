@@ -137,3 +137,28 @@ You can use [FoxyProxy](https://getfoxyproxy.org/) [Chrome Extension](https://ch
 Open [ipleak.net](https://ipleak.net) in your browser, you should see your ip address set as cloudflare's.
 
 <img width="1454" height="869" alt="image" src="https://github.com/user-attachments/assets/dfd3316d-69b6-4b0e-b564-fdb055dbdafd" />
+
+
+## Local Dashboard UI
+
+A dedicated frontend surface is now available at `http://127.0.0.1:<listen_port>/__mhr/ui/`.
+
+### Modules
+- Backend status / health
+- Routing policy preview
+- Relay diagnostics / log summaries
+- Config validation
+
+### UI states
+Each module can render:
+- **Loading** while the API call is in progress.
+- **Empty** with an action hint (for example: generate proxy traffic, then refresh).
+- **Success** with structured telemetry details.
+- **Error** with a clear recovery action (for example: confirm proxy is running and refresh).
+
+### Compatibility note
+The dashboard reads local proxy API data from `GET /__mhr/api/dashboard` and does **not** modify relay request/response payload fields or protocol behavior.
+
+### Screenshots
+![Dashboard Overview](docs/screenshots/dashboard-overview.svg)
+

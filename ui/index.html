@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MHR-Hybrid Dashboard</title>
+  <link rel="stylesheet" href="/__mhr/ui/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>MHR-Hybrid Control Dashboard</h1>
+    <p>Operational visibility without changing relay protocol contracts.</p>
+  </header>
+  <main class="layout">
+    <nav class="sidebar card">
+      <h2>Navigation</h2>
+      <a href="#backend-status">Backend status / health</a>
+      <a href="#routing-policy">Routing policy preview</a>
+      <a href="#relay-diagnostics">Relay diagnostics / logs</a>
+      <a href="#config-validation">Config validation</a>
+      <button id="refreshBtn">Refresh</button>
+    </nav>
+
+    <section class="content">
+      <article id="backend-status" class="card module"></article>
+      <article id="routing-policy" class="card module"></article>
+      <article id="relay-diagnostics" class="card module"></article>
+      <article id="config-validation" class="card module"></article>
+    </section>
+  </main>
+  <script src="/__mhr/ui/app.js" defer></script>
+</body>
+</html>
