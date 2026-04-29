@@ -48,7 +48,7 @@ This means the filter sees normal-looking Google traffic, while the actual desti
 ### 1 - Download project and extract 
 
 ```bash
-git clone https://github.com/denuitt1/MHR-Hybrid.git
+git clone https://github.com/mewshiam/MHR-Hybrid.git
 cd MHR-Hybrid
 pip install -r requirements.txt
 ```
