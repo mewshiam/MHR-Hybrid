@@ -29,6 +29,7 @@ import time
 from urllib.parse import urlparse
 
 from core.ws import ws_encode, ws_decode
+from core.relay_contract import RelayRequest, parse_response_json
 
 log = logging.getLogger("Fronter")
 
@@ -716,25 +717,23 @@ class DomainFronter:
             return await relay_cb(method, url, headers, body)
         return await tunnel_cb(header_block, body)
 
+
+    def _http_bytes_to_contract(self, raw: bytes) -> dict:
+        status, headers, body = self._split_raw_response(raw)
+        return {"s": status or 502, "h": headers or {}, "b": base64.b64encode(body).decode(), "e": None}
+
+    def _contract_to_http_bytes(self, data: dict) -> bytes:
+        return self._parse_relay_json(data)
+
+    async def _relay_apps_script_payload(self, payload: dict) -> dict:
+        raw = await self._relay_with_retry(payload)
+        status, headers, body = self._split_raw_response(raw)
+        return {"s": status or 502, "h": headers or {}, "b": base64.b64encode(body).decode(), "e": None}
+
     def _build_payload(self, method, url, headers, body):
         """Build the JSON relay payload dict."""
-        payload = {
-            "m": method,
-            "u": url,
-            "r": True,
-        }
-        if headers:
-            # Strip Accept-Encoding: Apps Script auto-decompresses gzip
-            # but NOT brotli/zstd — forwarding "br" causes garbled responses.
-            filt = {k: v for k, v in headers.items()
-                    if k.lower() != "accept-encoding"}
-            payload["h"] = filt if filt else headers
-        if body:
-            payload["b"] = base64.b64encode(body).decode()
-            ct = headers.get("Content-Type") or headers.get("content-type")
-            if ct:
-                payload["ct"] = ct
-        return payload
+        req = RelayRequest.from_inputs(method, url, headers, body)
+        return req.to_payload()
 
     # ── Batch collector ───────────────────────────────────────────
 
