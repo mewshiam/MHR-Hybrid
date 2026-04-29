@@ -143,6 +143,51 @@ Open [ipleak.net](https://ipleak.net) in your browser, you should see your ip ad
 
 A dedicated frontend surface is now available at `http://127.0.0.1:<listen_port>/__mhr/ui/`.
 
+### Run proxy backend
+
+Start the local proxy process first (this is the API provider for the dashboard):
+
+```bash
+python3 main.py --host 127.0.0.1 --port 8085
+```
+
+Runtime contract:
+- Proxy process exposes dashboard API at `GET http://<host>:<port>/__mhr/api/dashboard`.
+- `<host>` and `<port>` come from `listen_host`/`listen_port` in `config.json` or CLI overrides.
+
+### Run PyQt dashboard
+
+You can point the desktop dashboard at the proxy API with either CLI args or a settings file.
+
+CLI:
+
+```bash
+python3 -m desktop_ui.main --host 127.0.0.1 --port 8085
+```
+
+Or pass full URL:
+
+```bash
+python3 -m desktop_ui.main --api-base-url http://127.0.0.1:8085
+```
+
+Settings file (`desktop_ui_settings.json` by default, override with `--settings`):
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 8085
+}
+```
+
+If the proxy API is unavailable, the PyQt dashboard shows an actionable error state with steps to start/check the backend and verify the configured endpoint.
+
+### Migration note (`ui/` web dashboard)
+
+- The legacy `ui/` web dashboard is now optional/deprecated.
+- Recommended local desktop UX is the PyQt dashboard (`python3 -m desktop_ui.main`).
+- The embedded browser UI route (`/__mhr/ui/`) remains available for compatibility.
+
 ### Modules
 - Backend status / health
 - Routing policy preview
