@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Interactive setup wizard.
+"""Project setup entrypoint.
 
-Writes a ready-to-use config.json by prompting only for the values
-the user really has to choose. Everything else gets a sane default.
-
-Run:
-    python setup.py
+- `python setup.py` (no setuptools args): runs interactive config wizard.
+- `pip install .` / `python setup.py install`: uses setuptools metadata.
 """
 
 from __future__ import annotations
@@ -18,9 +15,56 @@ import string
 import sys
 from pathlib import Path
 
+from setuptools import find_packages, setup
+
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.json"
 EXAMPLE_PATH = HERE / "config.example.json"
+
+
+SETUPTOOLS_COMMANDS = {
+    "build",
+    "build_py",
+    "bdist",
+    "bdist_wheel",
+    "develop",
+    "dist_info",
+    "egg_info",
+    "install",
+    "sdist",
+    "editable_wheel",
+}
+
+
+def _is_setuptools_invocation(argv: list[str]) -> bool:
+    return any(arg.split("=")[0] in SETUPTOOLS_COMMANDS for arg in argv[1:])
+
+
+def _load_requirements(path: Path) -> list[str]:
+    reqs: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        reqs.append(stripped)
+    return reqs
+
+
+def run_packaging() -> None:
+    setup(
+        name="mhr-hybrid",
+        version="0.1.0",
+        description="MHR-Hybrid proxy and desktop UI launcher",
+        py_modules=["main"],
+        packages=find_packages(include=["src", "src.*", "desktop_ui", "desktop_ui.*"]),
+        install_requires=_load_requirements(HERE / "requirements.txt"),
+        entry_points={
+            "console_scripts": [
+                "mhr-hybrid=main:main",
+                "mhr-hybrid-ui=desktop_ui.main:main",
+            ]
+        },
+    )
 
 
 def _c(code: str, text: str) -> str:
@@ -164,7 +208,7 @@ def write_config(cfg: dict) -> None:
         f.write("\n")
 
 
-def main() -> int:
+def run_setup_wizard() -> int:
     print()
     print(bold("mhr-cfw - setup wizard"))
     print(dim("Answer a few questions and we'll write config.json for you."))
@@ -192,7 +236,7 @@ def main() -> int:
     print(green(f"[OK] wrote {CONFIG_PATH.name}"))
     print()
     print(bold("Next step:"))
-    print(f"  python main.py")
+    print("  python main.py")
     print()
     print(yellow("Reminder: the AUTH_KEY inside apps_script/Code.gs must match the auth_key"))
     print(yellow("you just entered - otherwise the relay will return 'unauthorized'."))
@@ -200,9 +244,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except KeyboardInterrupt:
-        print()
-        print(dim("Cancelled."))
-        sys.exit(130)
+    if _is_setuptools_invocation(sys.argv):
+        run_packaging()
+    else:
+        try:
+            sys.exit(run_setup_wizard())
+        except KeyboardInterrupt:
+            print()
+            print(dim("Cancelled."))
+            sys.exit(130)
