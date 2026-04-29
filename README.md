@@ -162,3 +162,20 @@ The dashboard reads local proxy API data from `GET /__mhr/api/dashboard` and doe
 ### Screenshots
 ![Dashboard Overview](docs/screenshots/dashboard-overview.svg)
 
+
+## Creating a GitHub Release (Maintainers)
+
+Use the built-in **Release** workflow to create a versioned tag and GitHub Release with attached artifacts.
+
+1. Open the repository on GitHub.
+2. Go to **Actions** → **Release**.
+3. Click **Run workflow**.
+4. Enter only the `version` input in tag format (example: `v1.0.0`).
+5. Click **Run workflow** to start.
+
+The workflow will:
+- validate the version format,
+- build release deliverables,
+- create/push the git tag,
+- create a GitHub Release named with the same version,
+- upload generated artifacts as release assets.
