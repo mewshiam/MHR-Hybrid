@@ -9,39 +9,66 @@ on:
         type: string
 
 jobs:
-  build:
-    name: Build release artifacts
+  validate:
+    name: Validate release inputs
     runs-on: ubuntu-latest
     steps:
       - name: Validate version format
         env:
           VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+          set -euo pipefail
+
+          VERSION="$(printf '%s' "$VERSION" | tr -d '[:space:]')"
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
             echo "Invalid version format: $VERSION"
             echo "Expected format: vMAJOR.MINOR.PATCH (example: v1.0.0)"
             exit 1
           fi
 
+  build:
+    name: Build ${{ matrix.platform }} release artifacts
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: windows
+            runner: windows-latest
+
+    steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Prepare release bundle
+        shell: bash
         env:
           VERSION: ${{ github.event.inputs.version }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           mkdir -p dist
-          git archive --format=zip --output="dist/MHR-Hybrid-${VERSION}.zip" HEAD
-          git archive --format=tar.gz --output="dist/MHR-Hybrid-${VERSION}.tar.gz" HEAD
 
-          cp config.example.json "dist/config.example-${VERSION}.json"
-          cp run.sh "dist/run-${VERSION}.sh"
-          cp run.bat "dist/run-${VERSION}.bat"
+          if [ "$PLATFORM" = "linux" ]; then
+            git archive --format=tar.gz --output="dist/MHR-Hybrid-${VERSION}-linux.tar.gz" HEAD
+            cp config.example.json "dist/config.example-${VERSION}-linux.json"
+            cp run.sh "dist/run-${VERSION}-linux.sh"
+          elif [ "$PLATFORM" = "windows" ]; then
+            git archive --format=zip --output="dist/MHR-Hybrid-${VERSION}-windows.zip" HEAD
+            cp config.example.json "dist/config.example-${VERSION}-windows.json"
+            cp run.bat "dist/run-${VERSION}-windows.bat"
+          else
+            echo "Unsupported platform: $PLATFORM"
+            exit 1
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-assets-${{ github.event.inputs.version }}
+          name: release-assets-${{ matrix.platform }}-${{ github.event.inputs.version }}
           path: dist/*
           if-no-files-found: error
 
@@ -58,7 +85,8 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-assets-${{ github.event.inputs.version }}
+          pattern: release-assets-*-${{ github.event.inputs.version }}
+          merge-multiple: true
           path: dist
 
       - name: Create and push git tag
