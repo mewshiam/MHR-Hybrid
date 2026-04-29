@@ -14,9 +14,12 @@ import logging
 import re
 import ssl
 import time
+import json
+import uuid
 
 from core.backend_router import BackendRouter, RequestMetadata
 from core.backend_adapters import AppsScriptAdapter, WorkerAdapter, RelayAttempt, should_fallback
+from core.error_map import to_client_error
 from core.relay_contract import RelayRequest
 from core.domain_fronter import DomainFronter
 
@@ -111,6 +114,8 @@ class ProxyServer:
         self.fronter = DomainFronter(config)
         self.router = BackendRouter(config)
         self._backend_errors = {"worker": 0, "apps_script": 0}
+        self._backend_health = {"worker": 100, "apps_script": 100}
+        self._backend_open_until = {"worker": 0.0, "apps_script": 0.0}
         self.apps_adapter = AppsScriptAdapter(self.fronter)
         self.worker_adapter = WorkerAdapter(self.fronter)
         self.mitm = None
@@ -655,6 +660,8 @@ class ProxyServer:
         return False
 
     def _choose_http_backend(self, method: str, url: str, headers: dict, body: bytes) -> str:
+        now = time.time()
+        available = {k: v <= now for k, v in self._backend_open_until.items()}
         meta = RequestMetadata(
             method=method.upper(),
             url=url,
@@ -665,39 +672,65 @@ class ProxyServer:
         )
         return self.router.choose(
             meta,
-            worker_mode_available=True,
-            apps_mode_available=bool(getattr(self.fronter, "_script_ids", [])),
+            worker_mode_available=available.get("worker", True),
+            apps_mode_available=available.get("apps_script", True) and bool(getattr(self.fronter, "_script_ids", [])),
         )
 
 
-    async def _relay_with_backend_chain(self, preferred: str, method: str, url: str, headers: dict, body: bytes) -> bytes:
+
+    def _is_retryable(self, method: str, headers: dict) -> bool:
+        safe = {"GET", "HEAD", "OPTIONS"}
+        if method.upper() in safe:
+            return True
+        return str(headers.get("X-Retry-Unsafe", "")).lower() in {"1", "true", "yes"}
+
+    def _record_backend_result(self, backend: str, success: bool):
+        if success:
+            self._backend_health[backend] = min(100, self._backend_health.get(backend, 100) + 5)
+            return
+        self._backend_health[backend] = max(0, self._backend_health.get(backend, 100) - 25)
+        if self._backend_health[backend] <= 25:
+            self._backend_open_until[backend] = time.time() + 30
+    async def _relay_with_backend_chain(self, preferred: str, method: str, url: str, headers: dict, body: bytes, correlation_id: str) -> bytes:
         request = RelayRequest.from_inputs(method, url, headers, body)
-        chain = [preferred, "apps_script" if preferred == "worker" else "worker"]
+        chain = [preferred]
+        if self._is_retryable(method, headers):
+            chain.append("apps_script" if preferred == "worker" else "worker")
         attempts: list[RelayAttempt] = []
         max_apps_payload = int(getattr(self.router, "worker_payload_limit", 2 * 1024 * 1024))
 
         if len(body) > max_apps_payload and preferred == "apps_script":
             chain = ["worker", "apps_script"]
 
+        start = time.perf_counter()
         for idx, backend in enumerate(chain):
             try:
                 adapter = self.worker_adapter if backend == "worker" else self.apps_adapter
-                out = await adapter.send(request)
+                out = await adapter.send(request, correlation_id=correlation_id)
+                latency_ms = int((time.perf_counter()-start)*1000)
                 reason = should_fallback(response=out)
                 attempts.append(RelayAttempt(backend=backend, reason=reason or "ok"))
-                if reason and idx == 0:
+                self._record_backend_result(backend, not bool(reason))
+                log.info("relay_result cid=%s backend=%s latency_ms=%s retry=%s fallback_reason=%s", correlation_id, backend, latency_ms, idx, reason or "none")
+                if reason and idx == 0 and len(chain) > 1:
                     continue
                 log.info("Relay attempts: %s", [(a.backend, a.reason) for a in attempts])
                 return self.fronter._contract_to_http_bytes(out)
             except Exception as exc:
-                reason = should_fallback(exc=exc) or "error"
+                reason = should_fallback(exc=exc) or "network"
+                self._record_backend_result(backend, False)
+                log.info("relay_result cid=%s backend=%s latency_ms=%s retry=%s fallback_reason=%s", correlation_id, backend, int((time.perf_counter()-start)*1000), idx, reason)
                 attempts.append(RelayAttempt(backend=backend, reason=reason))
-                if idx == 0:
+                if idx == 0 and len(chain) > 1:
                     continue
                 break
 
         log.info("Relay attempts: %s", [(a.backend, a.reason) for a in attempts])
-        return b"HTTP/1.1 502 Bad Gateway\r\n\r\nRelay chain failed\r\n"
+        reason = attempts[-1].reason if attempts else "unknown"
+        err = to_client_error(reason)
+        payload = json.dumps(err).encode()
+        status = err["error"]["status"]
+        return (f"HTTP/1.1 {status} Relay Error\r\nContent-Type: application/json\r\nContent-Length: {len(payload)}\r\n\r\n").encode() + payload
 
     # ── Plain HTTP forwarding ─────────────────────────────────────
 
@@ -741,7 +774,9 @@ class ProxyServer:
             await writer.drain()
             return
 
+        correlation_id = str(uuid.uuid4())
         selected = self._choose_http_backend(method, url, headers, body)
+        log.info("proxy_request cid=%s backend=%s method=%s url=%s", correlation_id, selected, method, url[:120])
         response = None
         if selected == "apps_script" and method == "GET" and not body:
             response = self._cache.get(url)
@@ -756,6 +791,7 @@ class ProxyServer:
                     url=url,
                     headers=headers,
                     body=body,
+                    correlation_id=correlation_id,
                 )
             except Exception:
                 self._backend_errors[selected] = self._backend_errors.get(selected, 0) + 1
