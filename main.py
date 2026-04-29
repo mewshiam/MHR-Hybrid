@@ -14,9 +14,9 @@ import logging
 import os
 import sys
 
-from core.cert_installer import install_ca, is_ca_trusted
-from core.mitm import CA_CERT_FILE
-from core.proxy_server import ProxyServer
+from src.cert_installer import install_ca, is_ca_trusted
+from src.mitm import CA_CERT_FILE
+from src.proxy_server import ProxyServer
 
 __version__ = "1.0.0"
 
@@ -171,7 +171,7 @@ def main():
         # Ensure CA file exists before checking / installing it.
         # MITMCertManager generates ca/ca.crt on first instantiation.
         if not os.path.exists(CA_CERT_FILE):
-            from core.mitm import MITMCertManager
+            from src.mitm import MITMCertManager
             MITMCertManager()  # side-effect: creates ca/ca.crt + ca/ca.key
 
         # Auto-install MITM CA if not already trusted
