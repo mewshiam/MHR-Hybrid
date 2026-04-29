@@ -31,10 +31,14 @@ class DashboardViewModel:
             for key in self.MODULES
         }
 
-    def error_state(self, err: Exception) -> dict[str, ModuleViewState]:
+    def error_state(self, err: Exception, endpoint: str | None = None) -> dict[str, ModuleViewState]:
+        endpoint_hint = endpoint or "http://127.0.0.1:<port>/__mhr/api/dashboard"
         detail = (
-            f"{err}\nAction: ensure proxy is running and open "
-            "http://127.0.0.1:<port>/__mhr/ui/ ."
+            f"{err}\n"
+            f"Action:\n"
+            f"1) Start proxy backend on the configured host/port.\n"
+            f"2) Verify this endpoint is reachable: {endpoint_hint}\n"
+            "3) Check host/port in PyQt dashboard settings and refresh."
         )
         return {
             key: ModuleViewState("error", "Failed to load dashboard data.", detail)

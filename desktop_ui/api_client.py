@@ -17,8 +17,12 @@ class DashboardApiClient:
     base_url: str = "http://127.0.0.1:8080"
     timeout_seconds: float = 5.0
 
+    @property
+    def dashboard_endpoint(self) -> str:
+        return f"{self.base_url.rstrip('/')}/__mhr/api/dashboard"
+
     def fetch_dashboard(self) -> dict:
-        endpoint = f"{self.base_url.rstrip('/')}/__mhr/api/dashboard"
+        endpoint = self.dashboard_endpoint
         req = Request(endpoint, method="GET")
         try:
             with urlopen(req, timeout=self.timeout_seconds) as resp:
