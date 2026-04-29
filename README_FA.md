@@ -1,9 +1,15 @@
 # آموزش راه‌اندازی پروژه (Cloudflare Worker + Google Apps Script)
 
+
+Persian translation was provided by [pingplas_channel](https://t.me/pingplas_channel)
+
+
+---
+
 ## 1) نصب پیش‌نیازها
 دستور زیر را اجرا کنید:
 
-```
+```bash
 pip install -r requirements.txt
 ```
 
@@ -112,3 +118,4 @@ HTTP proxy is running on 127.0.0.1:8085
 ```
 
 ---
+
