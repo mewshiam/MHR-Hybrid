@@ -1,12 +1,20 @@
 {
-	"mode": "apps_script",
-	"google_ip": "216.239.38.120",
-	"front_domain": "www.google.com",
-	"script_id": "YOUR_APPS_SCRIPT_DEPLOYMENT_ID",
-	"auth_key": "CHANGE_ME_TO_A_STRONG_SECRET",
-	"listen_host": "127.0.0.1",
-	"listen_port": 8085,
-	"log_level": "INFO",
-	"verify_ssl": true,
-	"hosts": {}
+  "mode": "apps_script",
+  "google_ip": "216.239.38.120",
+  "front_domain": "www.google.com",
+  "script_id": "YOUR_APPS_SCRIPT_DEPLOYMENT_ID",
+  "auth_key": "CHANGE_ME_TO_A_STRONG_SECRET",
+  "listen_host": "127.0.0.1",
+  "listen_port": 8085,
+  "log_level": "INFO",
+  "verify_ssl": true,
+  "hosts": {},
+  "router": {
+    "enabled": true,
+    "prefer_worker_first": true,
+    "worker_payload_limit": 2097152,
+    "worker_retry_threshold": 2,
+    "worker_error_threshold": 3,
+    "worker_timeout_floor_ms": 1200
+  }
 }
