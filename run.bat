@@ -4,17 +4,18 @@ cd /d "%~dp0"
 
 REM -------- MHR-Hybrid one-click launcher (Windows) --------
 REM Creates a local virtualenv, installs deps, runs the setup wizard
-REM if needed, then starts the proxy.
+REM if needed, then starts the proxy. Also checks and installs CA cert
+REM if not already trusted.
 
 set "VENV_DIR=.venv"
 set "PY="
 
 where py >nul 2>&1
-if %errorlevel%==0 (
+if !errorlevel!==0 (
     set "PY=py -3"
 ) else (
     where python >nul 2>&1
-    if %errorlevel%==0 (
+    if !errorlevel!==0 (
         set "PY=python"
     )
 )
@@ -50,6 +51,25 @@ if errorlevel 1 (
         exit /b 1
     )
 )
+
+if not exist "config.json" (
+    echo [*] No config.json found — launching setup wizard ...
+    "%VPY%" setup.py
+    if errorlevel 1 (
+        echo [X] Setup cancelled.
+        pause
+        exit /b 1
+    )
+)
+
+REM -------- Check for uninstall flag --------
+echo %* | findstr /C:"--uninstall-cert" >nul
+if not errorlevel 1 (
+    echo [*] Uninstalling CA certificate ...
+    "%VPY%" main.py --uninstall-cert
+    exit /b %errorlevel%
+)
+
 
 echo.
 echo [*] Starting MHR-Hybrid ...
