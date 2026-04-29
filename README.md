@@ -1,6 +1,6 @@
 # MHR-Hybrid - MasterHttpRelay + Cloudflare Worker
 
-[![GitHub](https://img.shields.io/badge/GitHub-MHR--Hybrid-blue?logo=github)](https://github.com/denuitt1/MHR-Hybrid)
+[![GitHub](https://img.shields.io/badge/GitHub-MHR--Hybrid-blue?logo=github)](https://github.com/mewshiam/MHR-Hybrid)
 
 
 | [English](README.md) | [Persian](README_FA.md) |
